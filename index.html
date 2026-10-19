@@ -6,28 +6,28 @@
         <title>AI Wrapper</title>
 
         <!-- Tailwind CSS -->
-        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="vendor/tailwindcss/tailwindcss.js"></script>
         <script>
             tailwind.config = { darkMode: "class" };
         </script>
         <link
             rel="stylesheet"
-            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+            href="vendor/fontawesome/css/all.min.css"
         />
-        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+        <script src="vendor/marked/marked.min.js"></script>
         <link
             rel="stylesheet"
-            href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css"
+            href="vendor/highlightjs/styles/atom-one-dark.min.css"
             id="hljs-theme"
         />
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script src="vendor/highlightjs/highlight.min.js"></script>
 
         <!-- KaTeX Requirements for LaTeX Rendering -->
         <link
             rel="stylesheet"
-            href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css"
+            href="vendor/katex/katex.min.css"
         />
-        <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+        <script src="vendor/katex/katex.min.js"></script>
 
         <!-- Custom Styles -->
         <link rel="stylesheet" href="style.css" />
@@ -496,6 +496,15 @@
                             <span>Providers & Auth</span>
                         </button>
                         <button
+                            onclick="switchSettingsTab('models')"
+                            id="tabBtn-models"
+                            class="settings-tab-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition text-left text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800"
+                            title="Models"
+                        >
+                            <i class="fa-solid fa-cube text-sm"></i>
+                            <span>Models</span>
+                        </button>
+                        <button
                             onclick="switchSettingsTab('system')"
                             id="tabBtn-system"
                             class="settings-tab-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition text-left text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800"
@@ -567,6 +576,106 @@
                                 id="providersContainer"
                                 class="space-y-3 max-h-[310px] overflow-y-auto pr-1"
                             ></div>
+                        </div>
+
+                        <div
+                            id="tabContent-models"
+                            class="settings-tab-panel hidden space-y-4"
+                        >
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <label
+                                        class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase"
+                                        >Title Generation</label
+                                    >
+                                    <label
+                                        class="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer"
+                                    >
+                                        <input
+                                            id="titleGenEnabled"
+                                            type="checkbox"
+                                            onchange="state.titleGenEnabled = this.checked"
+                                            class="rounded text-sky-500 cursor-pointer"
+                                        />
+                                        Generate titles automatically
+                                    </label>
+                                </div>
+                                <p class="text-[11px] text-slate-400 leading-relaxed">
+                                    Uses the selected model to create a short title for each new conversation. Falls back to the chat model if none is chosen.
+                                </p>
+
+                                <div class="relative">
+                                    <button
+                                        id="titleModelSelectBtn"
+                                        type="button"
+                                        onclick="toggleDropdown('titleModelDropdown')"
+                                        class="w-full flex items-center justify-between gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-xs font-medium transition outline-none border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                                        title="Select Title Generation Model"
+                                    >
+                                        <span class="flex items-center gap-2 truncate">
+                                            <i class="fa-solid fa-tag text-sky-500 text-xs"></i>
+                                            <span id="titleModelLabel" class="truncate">Chat Model (Default)</span>
+                                        </span>
+                                        <i class="fa-solid fa-chevron-down text-xs text-slate-400"></i>
+                                    </button>
+
+                                    <div
+                                        id="titleModelDropdown"
+                                        class="hidden mt-2 w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg p-2 space-y-2"
+                                    >
+                                        <div class="flex items-center justify-between px-2 py-1 text-xs text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                                            <span id="titleModelCountLabel" class="font-bold text-[11px] text-slate-400 uppercase">Models</span>
+                                            <button onclick="fetchModelsList(true)" class="hover:text-sky-500 text-xs p-1" title="Refresh models list">
+                                                <i class="fa-solid fa-arrows-rotate"></i>
+                                            </button>
+                                        </div>
+
+                                        <div class="relative px-1">
+                                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400 pointer-events-none"></i>
+                                            <input
+                                                type="text"
+                                                id="titleModelSearchInput"
+                                                oninput="renderTitleModelDropdown()"
+                                                onclick="event.stopPropagation()"
+                                                placeholder="Search models..."
+                                                class="w-full pl-8 pr-2.5 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 outline-none focus:border-sky-500 transition"
+                                            />
+                                        </div>
+
+                                        <div id="titleModelList" class="max-h-60 overflow-y-auto space-y-1 pr-1"></div>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onclick="selectTitleModel('', '')"
+                                    class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs bg-slate-100 dark:bg-slate-800/60 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition"
+                                >
+                                    <span class="flex items-center gap-2">
+                                        <i class="fa-solid fa-rotate-left text-[10px]"></i>
+                                        Use chat model
+                                    </span>
+                                    <i id="titleModelDefaultCheck" class="fa-solid fa-check text-xs text-sky-500 hidden"></i>
+                                </button>
+                            </div>
+
+                            <div
+                                class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 space-y-2"
+                            >
+                                <label
+                                    class="block text-[11px] font-bold text-slate-600 dark:text-slate-300"
+                                    >Custom Title Prompt</label
+                                >
+                                <textarea
+                                    id="titlePromptInput"
+                                    rows="3"
+                                    placeholder="Generate a concise title (max 6 words) for a conversation that starts with the following message. Reply with the title only, no quotes."
+                                    class="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 outline-none focus:border-sky-500 resize-y"
+                                ></textarea>
+                                <p class="text-[10px] text-slate-400">
+                                    Leave empty to use the default prompt.
+                                </p>
+                            </div>
                         </div>
 
                         <div

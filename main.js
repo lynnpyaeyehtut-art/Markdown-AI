@@ -509,6 +509,10 @@ let state = {
             ]),
     ),
     sidebarOpen: localStorage.getItem("ai_sidebar_open") !== "false",
+    titleGenEnabled: localStorage.getItem("ai_title_gen_enabled") !== "false",
+    titleProviderId: localStorage.getItem("ai_title_provider_id") || "",
+    titleModel: localStorage.getItem("ai_title_model") || "",
+    titlePrompt: localStorage.getItem("ai_title_prompt") || "",
     isEditing: false,
     editingMode: null,
     editingNodeId: null,
@@ -947,6 +951,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderParamsManager();
     renderActiveParamsBar();
     renderMcpToolsList();
+    updateTitleModelUI();
 
     fetchModelsList(false);
 });
@@ -1052,7 +1057,7 @@ function readProvidersFromUI() {
 }
 
 function switchSettingsTab(tabName) {
-    const tabs = ["provider", "system", "params", "mcp", "appearance", "reset"];
+    const tabs = ["provider", "models", "system", "params", "mcp", "appearance", "reset"];
     tabs.forEach((t) => {
         const btn = document.getElementById(`tabBtn-${t}`);
         const content = document.getElementById(`tabContent-${t}`);
@@ -1091,7 +1096,22 @@ async function saveAllSettings() {
     localStorage.setItem("ai_current_provider_id", state.currentProviderId);
     localStorage.setItem("ai_system_prompt", state.systemPrompt);
 
+    const titleEnabledEl = document.getElementById("titleGenEnabled");
+    if (titleEnabledEl) {
+        state.titleGenEnabled = titleEnabledEl.checked;
+        localStorage.setItem(
+            "ai_title_gen_enabled",
+            state.titleGenEnabled ? "true" : "false",
+        );
+    }
+    const titlePromptEl = document.getElementById("titlePromptInput");
+    if (titlePromptEl) {
+        state.titlePrompt = titlePromptEl.value.trim();
+        localStorage.setItem("ai_title_prompt", state.titlePrompt);
+    }
+
     updateModelButtonLabel();
+    updateTitleModelUI();
     toggleModal("settingsModal");
     fetchModelsList(true);
 }
@@ -1110,6 +1130,10 @@ function toggleModal(id) {
                     sysPromptEl.style.whiteSpace = "pre-wrap";
                 }
             }
+            updateTitleModelUI();
+            const titlePromptEl = document.getElementById("titlePromptInput");
+            if (titlePromptEl) titlePromptEl.value = state.titlePrompt || "";
+            renderTitleModelDropdown();
         }
     }
 }
@@ -1123,6 +1147,16 @@ function toggleDropdown(id) {
             if (searchInput) {
                 searchInput.value = "";
                 renderModelsDropdown();
+                setTimeout(() => searchInput.focus(), 50);
+            }
+        }
+        if (!drop.classList.contains("hidden") && id === "titleModelDropdown") {
+            const searchInput = document.getElementById(
+                "titleModelSearchInput",
+            );
+            if (searchInput) {
+                searchInput.value = "";
+                renderTitleModelDropdown();
                 setTimeout(() => searchInput.focus(), 50);
             }
         }
@@ -1140,6 +1174,18 @@ document.addEventListener("click", (e) => {
         !drop.contains(e.target)
     ) {
         drop.classList.add("hidden");
+    }
+
+    const titleDrop = document.getElementById("titleModelDropdown");
+    const titleBtn = document.getElementById("titleModelSelectBtn");
+    if (
+        titleDrop &&
+        !titleDrop.classList.contains("hidden") &&
+        titleBtn &&
+        !titleBtn.contains(e.target) &&
+        !titleDrop.contains(e.target)
+    ) {
+        titleDrop.classList.add("hidden");
     }
 
     if (
@@ -1734,7 +1780,230 @@ async function fetchModelsList(force = false) {
     }
 
     renderModelsDropdown();
+    renderTitleModelDropdown();
     if (icon) icon.classList.remove("fa-spin");
+}
+
+const DEFAULT_TITLE_PROMPT =
+    "Generate a concise title (max 6 words) for a conversation that starts with the following message. Reply with the title only, without quotes or punctuation at the end.";
+
+function getTitleGenerationTarget() {
+    if (!state.titleModel) {
+        return { provider: getActiveProvider(), model: state.currentModel };
+    }
+    const provider =
+        state.providers.find((p) => p.id === state.titleProviderId) ||
+        getActiveProvider();
+    return { provider, model: state.titleModel };
+}
+
+function updateTitleModelUI() {
+    const enabledEl = document.getElementById("titleGenEnabled");
+    if (enabledEl) enabledEl.checked = !!state.titleGenEnabled;
+
+    const labelEl = document.getElementById("titleModelLabel");
+    if (labelEl) {
+        if (state.titleModel) {
+            const prov = state.providers.find(
+                (p) => p.id === state.titleProviderId,
+            );
+            labelEl.innerHTML = `<strong class="font-bold">${escapeHtml(prov ? prov.name : "Model")}</strong> <span class="font-normal opacity-90">${escapeHtml(state.titleModel)}</span>`;
+        } else {
+            labelEl.innerText = "Chat Model (Default)";
+        }
+    }
+
+    const checkEl = document.getElementById("titleModelDefaultCheck");
+    if (checkEl) checkEl.classList.toggle("hidden", !!state.titleModel);
+}
+
+function renderTitleModelDropdown() {
+    const listEl = document.getElementById("titleModelList");
+    const countEl = document.getElementById("titleModelCountLabel");
+    const searchInput = document.getElementById("titleModelSearchInput");
+    const searchTerm = searchInput
+        ? searchInput.value.trim().toLowerCase()
+        : "";
+    if (!listEl) return;
+
+    let totalCount = 0;
+    listEl.innerHTML = "";
+
+    state.providers.forEach((prov) => {
+        const models = state.providerModels[prov.id] || [];
+        const matchingModels = models.filter(
+            (modelId) =>
+                modelId.toLowerCase().includes(searchTerm) ||
+                prov.name.toLowerCase().includes(searchTerm),
+        );
+
+        totalCount += matchingModels.length;
+
+        const groupContainer = document.createElement("div");
+        groupContainer.className = "space-y-1 mb-2";
+
+        const header = document.createElement("div");
+        header.className =
+            "px-2 py-1 text-[10px] font-bold text-sky-500 uppercase tracking-wider bg-slate-100 dark:bg-slate-800/60 rounded-lg";
+        header.innerText = prov.name;
+        groupContainer.appendChild(header);
+
+        if (matchingModels.length === 0) {
+            const emptyEl = document.createElement("div");
+            emptyEl.className =
+                "p-2 text-center text-[11px] text-slate-400 italic";
+            emptyEl.innerText = "No models found";
+            groupContainer.appendChild(emptyEl);
+        } else {
+            matchingModels.forEach((modelId) => {
+                const isSelected =
+                    prov.id === state.titleProviderId &&
+                    modelId === state.titleModel;
+
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = `w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-800 transition ${isSelected ? "bg-sky-500/10 text-sky-500 font-semibold" : "text-slate-700 dark:text-slate-300"}`;
+
+                btn.innerHTML = `
+                    <span class="truncate">
+                        <strong class="font-bold mr-1">${escapeHtml(prov.name)}</strong>
+                        <span class="font-normal opacity-90">${escapeHtml(modelId)}</span>
+                    </span>
+                    ${isSelected ? '<i class="fa-solid fa-check text-xs text-sky-500"></i>' : ""}
+                `;
+                btn.onclick = () => selectTitleModel(prov.id, modelId);
+                groupContainer.appendChild(btn);
+            });
+        }
+
+        listEl.appendChild(groupContainer);
+    });
+
+    if (state.providers.length === 0) {
+        listEl.innerHTML = `<div class="p-3 text-center text-xs text-slate-400 italic">No providers available</div>`;
+    }
+
+    if (countEl) countEl.innerText = `Models (${totalCount})`;
+    updateTitleModelUI();
+}
+
+function selectTitleModel(providerId, modelId) {
+    state.titleProviderId = providerId;
+    state.titleModel = modelId;
+    localStorage.setItem("ai_title_provider_id", providerId);
+    localStorage.setItem("ai_title_model", modelId);
+
+    const drop = document.getElementById("titleModelDropdown");
+    if (drop) drop.classList.add("hidden");
+    updateTitleModelUI();
+    renderTitleModelDropdown();
+}
+
+async function generateConversationTitle(conv, userText) {
+    if (!state.titleGenEnabled || !conv) return;
+
+    const cleanText = String(userText || "")
+        .replace(/<file\s+title="[^"]*">[\s\S]*?<\/file>/g, "")
+        .trim();
+    if (!cleanText) return;
+
+    const { provider, model } = getTitleGenerationTarget();
+    if (!provider || !model) return;
+    if (!provider.apiKey && provider.name.toLowerCase() !== "puter.js") return;
+
+    const userPrompt = (state.titlePrompt || "").trim() ||
+        "Generate a concise, professional title (max 5 words) based on the user's message. Output ONLY the title text. Do not include quotes, greetings, explanations, or punctuation at the end.";
+
+    const messages = [
+        { role: "system", content: userPrompt },
+        { role: "user", content: cleanText.slice(0, 2000) },
+    ];
+    const originalTitle = conv.title;
+
+    let rawTitle = "";
+
+    try {
+        if (provider.name.toLowerCase() === "puter.js") {
+            const response = await PuterSDKBridge.chatCompletion(
+                model,
+                messages,
+                { stream: false },
+            );
+            rawTitle = response?.choices?.[0]?.message?.content || "";
+        } else {
+            const bodyObj = {
+                model,
+                messages,
+                stream: false,
+                temperature: 0.0,
+                max_tokens: 50,
+            };
+
+            const response = await fetch(
+                `${normalizeBaseUrl(provider.baseUrl)}/chat/completions`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${provider.apiKey}`,
+                    },
+                    body: JSON.stringify(bodyObj),
+                },
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                const messageObj = data?.choices?.[0]?.message || {};
+                rawTitle = messageObj.content || messageObj.reasoning || messageObj.thinking || "";
+            }
+        }
+    } catch (e) {
+        // Fallback silently on network errors
+    }
+
+    let cleaned = rawTitle.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+    cleaned = cleaned
+        .replace(/^(here is a title:|title:|the user says.*?:|sure,.*?:|the user wants.*?:|we need to.*?[:\.]|let's.*?:)/gi, "")
+        .replace(/^["'`#*\s]+|["'`*\s]+$/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const isThoughtContaminated =
+        !cleaned ||
+        cleaned.toLowerCase().includes("the user") ||
+        cleaned.toLowerCase().includes("we need") ||
+        cleaned.toLowerCase().includes("help me") ||
+        cleaned.length > 40 ||
+        cleaned.split(/\s+/).length > 6;
+
+    let finalTitle = "";
+
+    if (isThoughtContaminated) {
+        let fallbackText = cleanText
+            .replace(/^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening))[\s,!.]*/i, "")
+            .replace(/^(can|could|would|will)\s+(you\s+)?(please\s+)?(help\s+me\s+)?(with\s+)?/i, "")
+            .trim();
+
+        if (!fallbackText) fallbackText = cleanText;
+
+        const words = fallbackText.split(/\s+/);
+        finalTitle = words.slice(0, 4).join(" ");
+        if (words.length > 4) finalTitle += "...";
+    } else {
+        finalTitle = cleaned;
+    }
+
+    if (!finalTitle) finalTitle = "New Conversation";
+
+    finalTitle = finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
+
+    const liveConv = state.conversations.find((c) => c.id === conv.id);
+    if (!liveConv) return;
+    if (liveConv.title !== originalTitle && liveConv.title !== "Untitled Chat") return;
+
+    liveConv.title = finalTitle;
+    saveConversationsState();
+    renderSidebarConversations();
 }
 
 function renderModelsDropdown() {
@@ -2354,10 +2623,7 @@ async function sendMessage() {
 
     if (!conv.rootIds) conv.rootIds = conv.rootId ? [conv.rootId] : [];
 
-    if (!conv.rootId) {
-        conv.title = rawText.slice(0, 30) + (rawText.length > 30 ? "..." : "");
-    }
-
+    const isNewConversation = !conv.rootId;
     const isEditMode = state.isEditing && state.editingMode === "edit";
     const userMsgId = isEditMode ? state.editingNodeId : "msg_" + Date.now();
     const parentId = state.isEditing
@@ -2395,6 +2661,14 @@ async function sendMessage() {
     }
 
     conv.activeLeafId = userMsgId;
+
+    // Trigger background title generation safely now that the conversation node structure exists
+    if (isNewConversation) {
+        conv.title = rawText.slice(0, 30) + (rawText.length > 30 ? "..." : "");
+        const convForTitle = conv;
+        const titleSourceText = fullTextPrompt;
+        setTimeout(() => generateConversationTitle(convForTitle, titleSourceText), 50);
+    }
     cancelEditingBranch();
     saveConversationsState();
     renderSidebarConversations();
